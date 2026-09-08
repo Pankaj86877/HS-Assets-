@@ -76,30 +76,35 @@ function RequestsContent() {
     e.preventDefault();
     if (!session) return;
 
-    if (isEditing && selectedRequest) {
-      const updated = await editRequest(selectedRequest.id, {
-        requestType, title, description, dueDate, content, additionalInformation
-      });
-      setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
-      setSelectedRequest(updated);
-    } else {
-      const newReq = await createRequest({
-        requesterId: session.id,
-        requesterName: session.name,
-        requestType,
-        title,
-        description,
-        dueDate,
-        content,
-        additionalInformation
-      });
-      setRequests([...requests, newReq]);
-    }
+    try {
+      if (isEditing && selectedRequest) {
+        const updated = await editRequest(selectedRequest.id, {
+          requestType, title, description, dueDate, content, additionalInformation
+        });
+        setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
+        setSelectedRequest(updated);
+      } else {
+        const newReq = await createRequest({
+          requesterId: session.id,
+          requesterName: session.name,
+          requestType,
+          title,
+          description,
+          dueDate,
+          content,
+          additionalInformation
+        });
+        setRequests([...requests, newReq]);
+      }
 
-    setIsFormOpen(false);
-    setIsEditing(false);
-    resetForm();
-    router.refresh();
+      setIsFormOpen(false);
+      setIsEditing(false);
+      resetForm();
+      router.refresh();
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to save request. If deployed to Vercel, please ensure Vercel KV Storage is properly connected and the environment variables are active! Details: " + (error.message || error));
+    }
   };
 
   const resetForm = () => {
@@ -113,39 +118,49 @@ function RequestsContent() {
   };
 
   const handleUpdateStatus = async (id: string, status: RequestStatus) => {
-    const updated = await updateRequestStatus(id, status);
-    
-    setRequests(prev => {
-      const next = prev.map(r => r.id === id ? updated : r);
-      // Re-sort
-      const STATUS_PRIORITY: Record<string, number> = {
-        "New": 1, "Accepted": 2, "In Progress": 3,
-        "Need More Information": 4, "Under Review": 5,
-        "Completed": 6, "Cancelled": 7
-      };
-      return [...next].sort((a, b) => {
-        if (STATUS_PRIORITY[a.status] !== STATUS_PRIORITY[b.status]) {
-          return STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
-        }
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    try {
+      const updated = await updateRequestStatus(id, status);
+      
+      setRequests(prev => {
+        const next = prev.map(r => r.id === id ? updated : r);
+        // Re-sort
+        const STATUS_PRIORITY: Record<string, number> = {
+          "New": 1, "Accepted": 2, "In Progress": 3,
+          "Need More Information": 4, "Under Review": 5,
+          "Completed": 6, "Cancelled": 7
+        };
+        return [...next].sort((a, b) => {
+          if (STATUS_PRIORITY[a.status] !== STATUS_PRIORITY[b.status]) {
+            return STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
+          }
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
       });
-    });
 
-    if (selectedRequest?.id === id) {
-      setSelectedRequest(updated);
+      if (selectedRequest?.id === id) {
+        setSelectedRequest(updated);
+      }
+      router.refresh();
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to update status. If deployed to Vercel, please ensure Vercel KV Storage is properly connected! Details: " + (error.message || error));
     }
-    router.refresh();
   };
 
   const handleDeleteRequest = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this request? This action cannot be undone.")) return;
-    await deleteRequest(id);
-    setRequests(prev => prev.filter(r => r.id !== id));
-    if (selectedRequest?.id === id) {
-      setIsDetailsOpen(false);
-      setSelectedRequest(null);
+    try {
+      await deleteRequest(id);
+      setRequests(prev => prev.filter(r => r.id !== id));
+      if (selectedRequest?.id === id) {
+        setIsDetailsOpen(false);
+        setSelectedRequest(null);
+      }
+      router.refresh();
+    } catch (error: any) {
+      console.error(error);
+      alert("Failed to delete request. If deployed to Vercel, please ensure Vercel KV Storage is properly connected! Details: " + (error.message || error));
     }
-    router.refresh();
   };
 
   const handleEditClick = (req: CreativeRequest) => {
