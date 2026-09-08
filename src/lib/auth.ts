@@ -29,18 +29,18 @@ export async function getUsers(): Promise<User[]> {
       console.warn("KV store is not configured. Falling back to default memory users.");
     }
     
-    if (loadedUsers.length === 0) {
-      // Database is empty or KV is missing! Auto-seed default users so we can log in.
-      const defaultUsers = await getDefaultUsers();
-      
-      if (kv) {
-        for (const u of defaultUsers) {
-          await kv.set(`user:${u.id}`, u);
-          await kv.sadd('users:index', u.id);
+    // Always ensure the three default users exist
+    const defaultUsers = await getDefaultUsers();
+    
+    for (const defaultUser of defaultUsers) {
+      // Use case-insensitive check
+      if (!loadedUsers.find(u => u.username.toLowerCase() === defaultUser.username.toLowerCase())) {
+        loadedUsers.push(defaultUser);
+        if (kv) {
+          await kv.set(`user:${defaultUser.id}`, defaultUser);
+          await kv.sadd('users:index', defaultUser.id);
         }
       }
-      
-      return defaultUsers;
     }
     
     return loadedUsers;
@@ -57,7 +57,8 @@ export async function hashPassword(password: string): Promise<string> {
 
 export async function authenticate(username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> {
   const users = await getUsers();
-  const user = users.find(u => u.username === username);
+  const normalizedUsername = username.trim().toLowerCase();
+  const user = users.find(u => u.username.toLowerCase() === normalizedUsername);
   
   if (!user || !user.isActive) {
     return { success: false, error: "Invalid username or password." };
