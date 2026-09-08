@@ -1,36 +1,24 @@
 "use server";
 
-import fs from 'fs/promises';
-import path from 'path';
 import { CreativeRequest, RequestStatus, RequestHistoryEntry } from './types';
 import { getSession } from './auth';
 import { getKV } from './kv';
 
-const requestsFilePath = path.join(process.cwd(), 'src/data/requests.json');
-
 export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
     const kv = getKV();
-    if (kv) {
-      const ids = await kv.smembers('requests:index');
-      if (ids && ids.length > 0) {
-        const requests = await Promise.all(ids.map(id => kv.get<CreativeRequest>(`request:${id}`)));
-        return requests.filter(Boolean) as CreativeRequest[];
-      } else {
-        const data = await fs.readFile(requestsFilePath, 'utf8');
-        const requests = JSON.parse(data);
-        if (requests && requests.length > 0) {
-          for (const req of requests) {
-            await kv.set(`request:${req.id}`, req);
-            await kv.sadd('requests:index', req.id);
-          }
-        }
-        return requests || [];
-      }
-    } else {
-      const data = await fs.readFile(requestsFilePath, 'utf8');
-      return JSON.parse(data);
+    if (!kv) {
+      console.warn("KV store is not configured. Returning empty requests list.");
+      return [];
     }
+    
+    const ids = await kv.smembers('requests:index');
+    if (ids && ids.length > 0) {
+      const requests = await Promise.all(ids.map(id => kv.get<CreativeRequest>(`request:${id}`)));
+      return requests.filter(Boolean) as CreativeRequest[];
+    }
+    
+    return [];
   } catch (error) {
     console.error("Failed to fetch requests:", error);
     return [];
@@ -75,13 +63,12 @@ export async function createRequest(data: Omit<CreativeRequest, "id" | "status" 
   };
 
   const kv = getKV();
-  if (kv) {
-    await kv.set(`request:${newRequest.id}`, newRequest);
-    await kv.sadd('requests:index', newRequest.id);
-  } else {
-    requests.push(newRequest);
-    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.set(`request:${newRequest.id}`, newRequest);
+  await kv.sadd('requests:index', newRequest.id);
   
   return newRequest;
 }
@@ -109,11 +96,11 @@ export async function updateRequestStatus(id: string, newStatus: RequestStatus) 
   req.updatedAt = now;
 
   const kv = getKV();
-  if (kv) {
-    await kv.set(`request:${req.id}`, req);
-  } else {
-    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.set(`request:${req.id}`, req);
   return req;
 }
 
@@ -125,13 +112,12 @@ export async function deleteRequest(id: string) {
 
   const requests = await fetchRequests();
   const kv = getKV();
-  if (kv) {
-    await kv.del(`request:${id}`);
-    await kv.srem('requests:index', id);
-  } else {
-    const updated = requests.filter(r => r.id !== id);
-    await fs.writeFile(requestsFilePath, JSON.stringify(updated, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.del(`request:${id}`);
+  await kv.srem('requests:index', id);
 }
 
 export async function editRequest(id: string, updates: Partial<CreativeRequest>) {
@@ -165,10 +151,10 @@ export async function editRequest(id: string, updates: Partial<CreativeRequest>)
   req.updatedAt = now;
 
   const kv = getKV();
-  if (kv) {
-    await kv.set(`request:${req.id}`, req);
-  } else {
-    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.set(`request:${req.id}`, req);
   return req;
 }

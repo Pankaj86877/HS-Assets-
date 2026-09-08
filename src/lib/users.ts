@@ -1,12 +1,8 @@
 "use server";
 
-import fs from 'fs/promises';
-import path from 'path';
 import { User } from './types';
 import { getSession, hashPassword, getUsers } from './auth';
 import { getKV } from './kv';
-
-const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
 
 export async function fetchUsers(): Promise<User[]> {
   const session = await getSession();
@@ -52,13 +48,12 @@ export async function createUser(data: Partial<User> & { password?: string }) {
   };
 
   const kv = getKV();
-  if (kv) {
-    await kv.set(`user:${newUser.id}`, newUser);
-    await kv.sadd('users:index', newUser.id);
-  } else {
-    users.push(newUser);
-    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.set(`user:${newUser.id}`, newUser);
+  await kv.sadd('users:index', newUser.id);
   
   const { passwordHash, ...rest } = newUser;
   return rest as User;
@@ -89,11 +84,11 @@ export async function updateUser(id: string, data: Partial<User> & { password?: 
   if (data.isActive !== undefined) users[idx].isActive = data.isActive;
 
   const kv = getKV();
-  if (kv) {
-    await kv.set(`user:${users[idx].id}`, users[idx]);
-  } else {
-    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.set(`user:${users[idx].id}`, users[idx]);
   
   const { passwordHash, ...rest } = users[idx];
   return rest as User;
@@ -106,11 +101,10 @@ export async function deleteUser(id: string) {
   let users = await getUsers();
   
   const kv = getKV();
-  if (kv) {
-    await kv.del(`user:${id}`);
-    await kv.srem('users:index', id);
-  } else {
-    users = users.filter(u => u.id !== id);
-    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  if (!kv) {
+    throw new Error("KV store is not configured.");
   }
+  
+  await kv.del(`user:${id}`);
+  await kv.srem('users:index', id);
 }

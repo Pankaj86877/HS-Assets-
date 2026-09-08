@@ -1,41 +1,25 @@
 "use server";
 
-import fs from 'fs/promises';
-import path from 'path';
 import crypto from 'crypto';
 import { User, UserRole } from './types';
 import { cookies } from 'next/headers';
-
-const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
-
 import { getKV } from './kv';
 
 export async function getUsers(): Promise<User[]> {
   try {
     const kv = getKV();
-    if (kv) {
-      const ids = await kv.smembers('users:index');
-      if (ids && ids.length > 0) {
-        const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
-        return users.filter(Boolean) as User[];
-      } else {
-        // Fallback to local file for migration
-        const data = await fs.readFile(usersFilePath, 'utf8');
-        const users = JSON.parse(data);
-        // Seed Vercel KV
-        if (users && users.length > 0) {
-          for (const u of users) {
-            await kv.set(`user:${u.id}`, u);
-            await kv.sadd('users:index', u.id);
-          }
-        }
-        return users || [];
-      }
-    } else {
-      // Local development fallback
-      const data = await fs.readFile(usersFilePath, 'utf8');
-      return JSON.parse(data);
+    if (!kv) {
+      console.warn("KV store is not configured. Returning empty user list.");
+      return [];
     }
+    
+    const ids = await kv.smembers('users:index');
+    if (ids && ids.length > 0) {
+      const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
+      return users.filter(Boolean) as User[];
+    }
+    
+    return [];
   } catch (error) {
     console.error("Failed to load users:", error);
     return [];
