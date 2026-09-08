@@ -4,13 +4,14 @@ import fs from 'fs/promises';
 import path from 'path';
 import { CreativeRequest, RequestStatus, RequestHistoryEntry } from './types';
 import { getSession } from './auth';
-import { kv, hasKV } from './kv';
+import { getKV } from './kv';
 
 const requestsFilePath = path.join(process.cwd(), 'src/data/requests.json');
 
 export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
-    if (hasKV && kv) {
+    const kv = getKV();
+    if (kv) {
       let requests = await kv.get<CreativeRequest[]>('requests');
       
       if (!requests) {
@@ -42,7 +43,8 @@ export async function getNewRequestsCount(): Promise<number> {
 }
 
 async function saveRequests(requests: CreativeRequest[]): Promise<void> {
-  if (hasKV && kv) {
+  const kv = getKV();
+  if (kv) {
     await kv.set('requests', requests);
   } else {
     await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');

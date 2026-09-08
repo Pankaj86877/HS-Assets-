@@ -8,11 +8,12 @@ import { cookies } from 'next/headers';
 
 const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
 
-import { kv, hasKV } from './kv';
+import { getKV } from './kv';
 
 export async function getUsers(): Promise<User[]> {
   try {
-    if (hasKV && kv) {
+    const kv = getKV();
+    if (kv) {
       let users = await kv.get<User[]>('users');
       
       if (!users) {
