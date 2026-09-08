@@ -8,15 +8,6 @@ import { getKV } from './kv';
 
 const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
 
-async function saveUsers(users: User[]) {
-  const kv = getKV();
-  if (kv) {
-    await kv.set('users', users);
-  } else {
-    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
-  }
-}
-
 export async function fetchUsers(): Promise<User[]> {
   const session = await getSession();
   if (!session || session.role !== "Admin") throw new Error("Unauthorized");
@@ -60,8 +51,14 @@ export async function createUser(data: Partial<User> & { password?: string }) {
     isActive: data.isActive ?? true
   };
 
-  users.push(newUser);
-  await saveUsers(users);
+  const kv = getKV();
+  if (kv) {
+    await kv.set(`user:${newUser.id}`, newUser);
+    await kv.sadd('users:index', newUser.id);
+  } else {
+    users.push(newUser);
+    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  }
   
   const { passwordHash, ...rest } = newUser;
   return rest as User;
@@ -91,7 +88,12 @@ export async function updateUser(id: string, data: Partial<User> & { password?: 
   if (data.name) users[idx].name = data.name;
   if (data.isActive !== undefined) users[idx].isActive = data.isActive;
 
-  await saveUsers(users);
+  const kv = getKV();
+  if (kv) {
+    await kv.set(`user:${users[idx].id}`, users[idx]);
+  } else {
+    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  }
   
   const { passwordHash, ...rest } = users[idx];
   return rest as User;
@@ -103,7 +105,12 @@ export async function deleteUser(id: string) {
 
   let users = await getUsers();
   
-  users = users.filter(u => u.id !== id);
-  
-  await saveUsers(users);
+  const kv = getKV();
+  if (kv) {
+    await kv.del(`user:${id}`);
+    await kv.srem('users:index', id);
+  } else {
+    users = users.filter(u => u.id !== id);
+    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  }
 }

@@ -14,18 +14,23 @@ export async function getUsers(): Promise<User[]> {
   try {
     const kv = getKV();
     if (kv) {
-      let users = await kv.get<User[]>('users');
-      
-      if (!users) {
+      const ids = await kv.smembers('users:index');
+      if (ids && ids.length > 0) {
+        const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
+        return users.filter(Boolean) as User[];
+      } else {
         // Fallback to local file for migration
         const data = await fs.readFile(usersFilePath, 'utf8');
-        users = JSON.parse(data);
+        const users = JSON.parse(data);
         // Seed Vercel KV
         if (users && users.length > 0) {
-          await kv.set('users', users);
+          for (const u of users) {
+            await kv.set(`user:${u.id}`, u);
+            await kv.sadd('users:index', u.id);
+          }
         }
+        return users || [];
       }
-      return users || [];
     } else {
       // Local development fallback
       const data = await fs.readFile(usersFilePath, 'utf8');

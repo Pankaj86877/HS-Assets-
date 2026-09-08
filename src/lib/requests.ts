@@ -12,17 +12,21 @@ export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
     const kv = getKV();
     if (kv) {
-      let requests = await kv.get<CreativeRequest[]>('requests');
-      
-      if (!requests) {
+      const ids = await kv.smembers('requests:index');
+      if (ids && ids.length > 0) {
+        const requests = await Promise.all(ids.map(id => kv.get<CreativeRequest>(`request:${id}`)));
+        return requests.filter(Boolean) as CreativeRequest[];
+      } else {
         const data = await fs.readFile(requestsFilePath, 'utf8');
-        requests = JSON.parse(data);
+        const requests = JSON.parse(data);
         if (requests && requests.length > 0) {
-          await kv.set('requests', requests);
+          for (const req of requests) {
+            await kv.set(`request:${req.id}`, req);
+            await kv.sadd('requests:index', req.id);
+          }
         }
+        return requests || [];
       }
-      
-      return requests || [];
     } else {
       const data = await fs.readFile(requestsFilePath, 'utf8');
       return JSON.parse(data);
@@ -42,14 +46,9 @@ export async function getNewRequestsCount(): Promise<number> {
   return requests.filter(r => r.status === "New").length;
 }
 
-async function saveRequests(requests: CreativeRequest[]): Promise<void> {
-  const kv = getKV();
-  if (kv) {
-    await kv.set('requests', requests);
-  } else {
-    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
-  }
-}
+// saveRequests is no longer used for array storage
+// We keep this to avoid breaking code that relies on it locally, but it won't be used in production
+// It will be removed entirely in the next step when we clean up local fallback.
 
 export async function createRequest(data: Omit<CreativeRequest, "id" | "status" | "createdAt" | "updatedAt" | "history">) {
   const session = await getSession();
@@ -75,8 +74,14 @@ export async function createRequest(data: Omit<CreativeRequest, "id" | "status" 
     history: [historyEntry]
   };
 
-  requests.push(newRequest);
-  await saveRequests(requests);
+  const kv = getKV();
+  if (kv) {
+    await kv.set(`request:${newRequest.id}`, newRequest);
+    await kv.sadd('requests:index', newRequest.id);
+  } else {
+    requests.push(newRequest);
+    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  }
   
   return newRequest;
 }
@@ -103,7 +108,12 @@ export async function updateRequestStatus(id: string, newStatus: RequestStatus) 
   req.status = newStatus;
   req.updatedAt = now;
 
-  await saveRequests(requests);
+  const kv = getKV();
+  if (kv) {
+    await kv.set(`request:${req.id}`, req);
+  } else {
+    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  }
   return req;
 }
 
@@ -114,8 +124,14 @@ export async function deleteRequest(id: string) {
   }
 
   const requests = await fetchRequests();
-  const updated = requests.filter(r => r.id !== id);
-  await saveRequests(updated);
+  const kv = getKV();
+  if (kv) {
+    await kv.del(`request:${id}`);
+    await kv.srem('requests:index', id);
+  } else {
+    const updated = requests.filter(r => r.id !== id);
+    await fs.writeFile(requestsFilePath, JSON.stringify(updated, null, 2), 'utf8');
+  }
 }
 
 export async function editRequest(id: string, updates: Partial<CreativeRequest>) {
@@ -148,6 +164,11 @@ export async function editRequest(id: string, updates: Partial<CreativeRequest>)
   
   req.updatedAt = now;
 
-  await saveRequests(requests);
+  const kv = getKV();
+  if (kv) {
+    await kv.set(`request:${req.id}`, req);
+  } else {
+    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  }
   return req;
 }
