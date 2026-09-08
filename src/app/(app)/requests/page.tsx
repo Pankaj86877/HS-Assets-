@@ -84,7 +84,7 @@ function RequestsContent() {
         setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
         setSelectedRequest(updated);
       } else {
-        const newReq = await createRequest({
+        const res = await createRequest({
           requesterId: session.id,
           requesterName: session.name,
           requestType,
@@ -94,7 +94,13 @@ function RequestsContent() {
           content,
           additionalInformation
         });
-        setRequests([...requests, newReq]);
+        
+        if (!res.success || !res.data) {
+          alert(`Failed to save request. Details: ${res.error}`);
+          return;
+        }
+        
+        setRequests([...requests, res.data]);
       }
 
       setIsFormOpen(false);
@@ -103,7 +109,7 @@ function RequestsContent() {
       router.refresh();
     } catch (error: any) {
       console.error(error);
-      alert("Failed to save request. If deployed to Vercel, please ensure Vercel KV Storage is properly connected and the environment variables are active! Details: " + (error.message || error));
+      alert("An unexpected error occurred. Details: " + (error.message || error));
     }
   };
 

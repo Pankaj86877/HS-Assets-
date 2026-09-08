@@ -38,39 +38,43 @@ export async function getNewRequestsCount(): Promise<number> {
 // We keep this to avoid breaking code that relies on it locally, but it won't be used in production
 // It will be removed entirely in the next step when we clean up local fallback.
 
-export async function createRequest(data: Omit<CreativeRequest, "id" | "status" | "createdAt" | "updatedAt" | "history">) {
-  const session = await getSession();
-  if (!session) throw new Error("Unauthorized");
+export async function createRequest(data: Omit<CreativeRequest, "id" | "status" | "createdAt" | "updatedAt" | "history">): Promise<{success: boolean, data?: CreativeRequest, error?: string}> {
+  try {
+    const session = await getSession();
+    if (!session) return { success: false, error: "Unauthorized" };
 
-  const requests = await fetchRequests();
-  const newId = `REQ-${new Date().getFullYear()}-${String(requests.length + 1).padStart(5, '0')}`;
-  
-  const now = new Date().toISOString();
-  
-  const historyEntry: RequestHistoryEntry = {
-    action: "Request submitted",
-    changedBy: session.name,
-    date: now
-  };
+    const requests = await fetchRequests();
+    const newId = `REQ-${new Date().getFullYear()}-${String(requests.length + 1).padStart(5, '0')}`;
+    
+    const now = new Date().toISOString();
+    
+    const historyEntry: RequestHistoryEntry = {
+      action: "Request submitted",
+      changedBy: session.name,
+      date: now
+    };
 
-  const newRequest: CreativeRequest = {
-    ...data,
-    id: newId,
-    status: "New",
-    createdAt: now,
-    updatedAt: now,
-    history: [historyEntry]
-  };
+    const newRequest: CreativeRequest = {
+      ...data,
+      id: newId,
+      status: "New",
+      createdAt: now,
+      updatedAt: now,
+      history: [historyEntry]
+    };
 
-  const kv = getKV();
-  if (!kv) {
-    throw new Error("KV store is not configured.");
+    const kv = getKV();
+    if (!kv) {
+      return { success: false, error: "KV store is not configured. Missing UPSTASH_REDIS_REST_URL and KV_REST_API_URL environment variables." };
+    }
+    
+    await kv.set(`request:${newRequest.id}`, newRequest);
+    await kv.sadd('requests:index', newRequest.id);
+    
+    return { success: true, data: newRequest };
+  } catch (error: any) {
+    return { success: false, error: error.message || String(error) };
   }
-  
-  await kv.set(`request:${newRequest.id}`, newRequest);
-  await kv.sadd('requests:index', newRequest.id);
-  
-  return newRequest;
 }
 
 export async function updateRequestStatus(id: string, newStatus: RequestStatus) {
