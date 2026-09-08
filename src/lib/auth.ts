@@ -8,11 +8,32 @@ import { cookies } from 'next/headers';
 
 const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
 
+import { kv } from '@vercel/kv';
+
 export async function getUsers(): Promise<User[]> {
   try {
-    const data = await fs.readFile(usersFilePath, 'utf8');
-    return JSON.parse(data);
+    const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+    
+    if (useKV) {
+      let users = await kv.get<User[]>('users');
+      
+      if (!users) {
+        // Fallback to local file for migration
+        const data = await fs.readFile(usersFilePath, 'utf8');
+        users = JSON.parse(data);
+        // Seed Vercel KV
+        if (users && users.length > 0) {
+          await kv.set('users', users);
+        }
+      }
+      return users || [];
+    } else {
+      // Local development fallback
+      const data = await fs.readFile(usersFilePath, 'utf8');
+      return JSON.parse(data);
+    }
   } catch (error) {
+    console.error("Failed to load users:", error);
     return [];
   }
 }

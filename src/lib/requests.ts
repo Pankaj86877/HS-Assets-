@@ -4,14 +4,32 @@ import fs from 'fs/promises';
 import path from 'path';
 import { CreativeRequest, RequestStatus, RequestHistoryEntry } from './types';
 import { getSession } from './auth';
+import { kv } from '@vercel/kv';
 
 const requestsFilePath = path.join(process.cwd(), 'src/data/requests.json');
 
 export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
-    const data = await fs.readFile(requestsFilePath, 'utf8');
-    return JSON.parse(data);
+    const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+    
+    if (useKV) {
+      let requests = await kv.get<CreativeRequest[]>('requests');
+      
+      if (!requests) {
+        const data = await fs.readFile(requestsFilePath, 'utf8');
+        requests = JSON.parse(data);
+        if (requests && requests.length > 0) {
+          await kv.set('requests', requests);
+        }
+      }
+      
+      return requests || [];
+    } else {
+      const data = await fs.readFile(requestsFilePath, 'utf8');
+      return JSON.parse(data);
+    }
   } catch (error) {
+    console.error("Failed to fetch requests:", error);
     return [];
   }
 }
@@ -26,7 +44,12 @@ export async function getNewRequestsCount(): Promise<number> {
 }
 
 async function saveRequests(requests: CreativeRequest[]): Promise<void> {
-  await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+  if (useKV) {
+    await kv.set('requests', requests);
+  } else {
+    await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');
+  }
 }
 
 export async function createRequest(data: Omit<CreativeRequest, "id" | "status" | "createdAt" | "updatedAt" | "history">) {

@@ -3,18 +3,26 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { User } from './types';
-import { getSession, hashPassword } from './auth';
+import { getSession, hashPassword, getUsers } from './auth';
+import { kv } from '@vercel/kv';
 
 const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
+
+async function saveUsers(users: User[]) {
+  const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
+  if (useKV) {
+    await kv.set('users', users);
+  } else {
+    await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  }
+}
 
 export async function fetchUsers(): Promise<User[]> {
   const session = await getSession();
   if (!session || session.role !== "Admin") throw new Error("Unauthorized");
   
   try {
-    const data = await fs.readFile(usersFilePath, 'utf8');
-    // Don't send password hashes to client
-    const users = JSON.parse(data) as User[];
+    const users = await getUsers();
     return users.map(u => {
       const { passwordHash, ...rest } = u;
       return rest as User;
@@ -28,8 +36,7 @@ export async function createUser(data: Partial<User> & { password?: string }) {
   const session = await getSession();
   if (!session || session.role !== "Admin") throw new Error("Unauthorized");
 
-  const usersText = await fs.readFile(usersFilePath, 'utf8');
-  const users: User[] = JSON.parse(usersText);
+  const users = await getUsers();
 
   if (users.find(u => u.username === data.username)) {
     throw new Error("Username already exists");
@@ -54,7 +61,7 @@ export async function createUser(data: Partial<User> & { password?: string }) {
   };
 
   users.push(newUser);
-  await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  await saveUsers(users);
   
   const { passwordHash, ...rest } = newUser;
   return rest as User;
@@ -64,8 +71,7 @@ export async function updateUser(id: string, data: Partial<User> & { password?: 
   const session = await getSession();
   if (!session || session.role !== "Admin") throw new Error("Unauthorized");
 
-  const usersText = await fs.readFile(usersFilePath, 'utf8');
-  const users: User[] = JSON.parse(usersText);
+  const users = await getUsers();
   
   const idx = users.findIndex(u => u.id === id);
   if (idx === -1) throw new Error("User not found");
@@ -85,7 +91,7 @@ export async function updateUser(id: string, data: Partial<User> & { password?: 
   if (data.name) users[idx].name = data.name;
   if (data.isActive !== undefined) users[idx].isActive = data.isActive;
 
-  await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  await saveUsers(users);
   
   const { passwordHash, ...rest } = users[idx];
   return rest as User;
@@ -95,10 +101,9 @@ export async function deleteUser(id: string) {
   const session = await getSession();
   if (!session || session.role !== "Admin") throw new Error("Unauthorized");
 
-  const usersText = await fs.readFile(usersFilePath, 'utf8');
-  let users: User[] = JSON.parse(usersText);
+  let users = await getUsers();
   
   users = users.filter(u => u.id !== id);
   
-  await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');
+  await saveUsers(users);
 }
