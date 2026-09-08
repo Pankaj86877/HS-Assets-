@@ -2,16 +2,10 @@
 
 import { CreativeRequest, RequestStatus, RequestHistoryEntry } from './types';
 import { getSession } from './auth';
-import { getKV } from './kv';
+import { kv } from '@vercel/kv';
 
 export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
-    const kv = getKV();
-    if (!kv) {
-      console.warn("KV store is not configured. Returning empty requests list.");
-      return [];
-    }
-    
     const ids = await kv.smembers('requests:index');
     if (ids && ids.length > 0) {
       const requests = await Promise.all(ids.map(id => kv.get<CreativeRequest>(`request:${id}`)));
@@ -63,11 +57,6 @@ export async function createRequest(data: Omit<CreativeRequest, "id" | "status" 
       history: [historyEntry]
     };
 
-    const kv = getKV();
-    if (!kv) {
-      return { success: false, error: "KV store is not configured. Missing UPSTASH_REDIS_REST_URL and KV_REST_API_URL environment variables." };
-    }
-    
     await kv.set(`request:${newRequest.id}`, newRequest);
     await kv.sadd('requests:index', newRequest.id);
     
@@ -99,11 +88,6 @@ export async function updateRequestStatus(id: string, newStatus: RequestStatus) 
   req.status = newStatus;
   req.updatedAt = now;
 
-  const kv = getKV();
-  if (!kv) {
-    throw new Error("KV store is not configured.");
-  }
-  
   await kv.set(`request:${req.id}`, req);
   return req;
 }
@@ -115,11 +99,6 @@ export async function deleteRequest(id: string) {
   }
 
   const requests = await fetchRequests();
-  const kv = getKV();
-  if (!kv) {
-    throw new Error("KV store is not configured.");
-  }
-  
   await kv.del(`request:${id}`);
   await kv.srem('requests:index', id);
 }
@@ -154,11 +133,6 @@ export async function editRequest(id: string, updates: Partial<CreativeRequest>)
   
   req.updatedAt = now;
 
-  const kv = getKV();
-  if (!kv) {
-    throw new Error("KV store is not configured.");
-  }
-  
   await kv.set(`request:${req.id}`, req);
   return req;
 }

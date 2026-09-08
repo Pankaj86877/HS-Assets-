@@ -3,7 +3,7 @@
 import crypto from 'crypto';
 import { User, UserRole } from './types';
 import { cookies } from 'next/headers';
-import { getKV } from './kv';
+import { kv } from '@vercel/kv';
 
 export async function getUsers(): Promise<User[]> {
   const getDefaultUsers = async (): Promise<User[]> => {
@@ -16,17 +16,16 @@ export async function getUsers(): Promise<User[]> {
   };
 
   try {
-    const kv = getKV();
     let loadedUsers: User[] = [];
     
-    if (kv) {
+    try {
       const ids = await kv.smembers('users:index');
       if (ids && ids.length > 0) {
         const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
         loadedUsers = users.filter(Boolean) as User[];
       }
-    } else {
-      console.warn("KV store is not configured. Falling back to default memory users.");
+    } catch (e) {
+      console.warn("KV fetch failed, continuing to fallback", e);
     }
     
     // Always ensure the three default users exist
@@ -36,9 +35,11 @@ export async function getUsers(): Promise<User[]> {
       // Use case-insensitive check
       if (!loadedUsers.find(u => u.username.toLowerCase() === defaultUser.username.toLowerCase())) {
         loadedUsers.push(defaultUser);
-        if (kv) {
+        try {
           await kv.set(`user:${defaultUser.id}`, defaultUser);
           await kv.sadd('users:index', defaultUser.id);
+        } catch (e) {
+          console.warn("Failed to seed user to KV", e);
         }
       }
     }
