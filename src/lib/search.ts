@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import Fuse from "fuse.js";
 import { SearchResource } from "./types";
+import { kv } from '@vercel/kv';
 
 const fuseOptions = {
   keys: [
@@ -28,18 +29,26 @@ const employeesDataPath = path.join(process.cwd(), 'src/data/employees.json');
 // --- GOOGLE DRIVE FOLDERS ---
 export async function fetchResources(): Promise<SearchResource[]> {
   try {
+    const kvData = await kv.get<SearchResource[]>('resources:data');
+    if (kvData) {
+      return kvData.map(r => ({ ...r, type: r.type || "google-drive" }));
+    }
     const data = await fs.readFile(dataPath, 'utf-8');
     const parsed = JSON.parse(data) as SearchResource[];
-    // Patch existing records that might be missing the type
     return parsed.map(r => ({ ...r, type: r.type || "google-drive" }));
   } catch (error) {
-    console.error("Error reading resources.json:", error);
+    console.error("Error fetching resources:", error);
     return [];
   }
 }
 
 async function saveResources(resources: SearchResource[]) {
-  await fs.writeFile(dataPath, JSON.stringify(resources, null, 2), 'utf-8');
+  try {
+    await kv.set('resources:data', resources);
+  } catch (e) {
+    // If kv fails, attempt fs (for local dev without KV)
+    await fs.writeFile(dataPath, JSON.stringify(resources, null, 2), 'utf-8');
+  }
 }
 
 export async function addResource(resource: SearchResource) {
