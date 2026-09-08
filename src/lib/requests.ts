@@ -4,15 +4,13 @@ import fs from 'fs/promises';
 import path from 'path';
 import { CreativeRequest, RequestStatus, RequestHistoryEntry } from './types';
 import { getSession } from './auth';
-import { kv } from '@vercel/kv';
+import { kv, hasKV } from './kv';
 
 const requestsFilePath = path.join(process.cwd(), 'src/data/requests.json');
 
 export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
-    const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
-    
-    if (useKV) {
+    if (hasKV && kv) {
       let requests = await kv.get<CreativeRequest[]>('requests');
       
       if (!requests) {
@@ -44,8 +42,7 @@ export async function getNewRequestsCount(): Promise<number> {
 }
 
 async function saveRequests(requests: CreativeRequest[]): Promise<void> {
-  const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
-  if (useKV) {
+  if (hasKV && kv) {
     await kv.set('requests', requests);
   } else {
     await fs.writeFile(requestsFilePath, JSON.stringify(requests, null, 2), 'utf8');

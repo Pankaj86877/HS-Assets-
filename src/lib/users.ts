@@ -4,13 +4,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { User } from './types';
 import { getSession, hashPassword, getUsers } from './auth';
-import { kv } from '@vercel/kv';
+import { kv, hasKV } from './kv';
 
 const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
 
 async function saveUsers(users: User[]) {
-  const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
-  if (useKV) {
+  if (hasKV && kv) {
     await kv.set('users', users);
   } else {
     await fs.writeFile(usersFilePath, JSON.stringify(users, null, 2), 'utf8');

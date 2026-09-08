@@ -8,13 +8,11 @@ import { cookies } from 'next/headers';
 
 const usersFilePath = path.join(process.cwd(), 'src/data/users.json');
 
-import { kv } from '@vercel/kv';
+import { kv, hasKV } from './kv';
 
 export async function getUsers(): Promise<User[]> {
   try {
-    const useKV = process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN;
-    
-    if (useKV) {
+    if (hasKV && kv) {
       let users = await kv.get<User[]>('users');
       
       if (!users) {
