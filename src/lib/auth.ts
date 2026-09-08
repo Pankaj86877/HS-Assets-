@@ -17,9 +17,22 @@ export async function getUsers(): Promise<User[]> {
     if (ids && ids.length > 0) {
       const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
       return users.filter(Boolean) as User[];
+    } else {
+      // Database is empty! Auto-seed default users so we can log in.
+      const defaultPassword = await hashPassword("Highspring365");
+      const defaultUsers: User[] = [
+        { id: "user-001", username: "Admin", name: "System Admin", role: "Admin", passwordHash: defaultPassword, isActive: true },
+        { id: "user-002", username: "Marketing", name: "Marketing Team", role: "Marketing", passwordHash: defaultPassword, isActive: true },
+        { id: "user-003", username: "Requester", name: "Standard Requester", role: "Requester", passwordHash: defaultPassword, isActive: true }
+      ];
+      
+      for (const u of defaultUsers) {
+        await kv.set(`user:${u.id}`, u);
+        await kv.sadd('users:index', u.id);
+      }
+      
+      return defaultUsers;
     }
-    
-    return [];
   } catch (error) {
     console.error("Failed to load users:", error);
     return [];
