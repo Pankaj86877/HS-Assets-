@@ -10,7 +10,7 @@ export async function getUsers(): Promise<User[]> {
     const defaultPassword = await hashPassword("Highspring365");
     return [
       { id: "user-001", username: "Admin", name: "System Admin", role: "Admin", passwordHash: defaultPassword, isActive: true },
-      { id: "user-002", username: "Marketing", name: "Marketing Team", role: "Marketing", passwordHash: defaultPassword, isActive: true },
+      { id: "user-002", username: "Marketing", name: "Marketing Team", role: "Marketing User", passwordHash: defaultPassword, isActive: true },
       { id: "user-003", username: "Requester", name: "Standard Requester", role: "Requester", passwordHash: defaultPassword, isActive: true }
     ];
   };
