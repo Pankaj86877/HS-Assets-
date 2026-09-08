@@ -6,36 +6,48 @@ import { cookies } from 'next/headers';
 import { getKV } from './kv';
 
 export async function getUsers(): Promise<User[]> {
+  const getDefaultUsers = async (): Promise<User[]> => {
+    const defaultPassword = await hashPassword("Highspring365");
+    return [
+      { id: "user-001", username: "Admin", name: "System Admin", role: "Admin", passwordHash: defaultPassword, isActive: true },
+      { id: "user-002", username: "Marketing", name: "Marketing Team", role: "Marketing", passwordHash: defaultPassword, isActive: true },
+      { id: "user-003", username: "Requester", name: "Standard Requester", role: "Requester", passwordHash: defaultPassword, isActive: true }
+    ];
+  };
+
   try {
     const kv = getKV();
-    if (!kv) {
-      console.warn("KV store is not configured. Returning empty user list.");
-      return [];
+    let loadedUsers: User[] = [];
+    
+    if (kv) {
+      const ids = await kv.smembers('users:index');
+      if (ids && ids.length > 0) {
+        const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
+        loadedUsers = users.filter(Boolean) as User[];
+      }
+    } else {
+      console.warn("KV store is not configured. Falling back to default memory users.");
     }
     
-    const ids = await kv.smembers('users:index');
-    if (ids && ids.length > 0) {
-      const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
-      return users.filter(Boolean) as User[];
-    } else {
-      // Database is empty! Auto-seed default users so we can log in.
-      const defaultPassword = await hashPassword("Highspring365");
-      const defaultUsers: User[] = [
-        { id: "user-001", username: "Admin", name: "System Admin", role: "Admin", passwordHash: defaultPassword, isActive: true },
-        { id: "user-002", username: "Marketing", name: "Marketing Team", role: "Marketing", passwordHash: defaultPassword, isActive: true },
-        { id: "user-003", username: "Requester", name: "Standard Requester", role: "Requester", passwordHash: defaultPassword, isActive: true }
-      ];
+    if (loadedUsers.length === 0) {
+      // Database is empty or KV is missing! Auto-seed default users so we can log in.
+      const defaultUsers = await getDefaultUsers();
       
-      for (const u of defaultUsers) {
-        await kv.set(`user:${u.id}`, u);
-        await kv.sadd('users:index', u.id);
+      if (kv) {
+        for (const u of defaultUsers) {
+          await kv.set(`user:${u.id}`, u);
+          await kv.sadd('users:index', u.id);
+        }
       }
       
       return defaultUsers;
     }
+    
+    return loadedUsers;
   } catch (error) {
     console.error("Failed to load users:", error);
-    return [];
+    // Absolute fallback: if Redis is completely down, allow login anyway
+    return await getDefaultUsers();
   }
 }
 
