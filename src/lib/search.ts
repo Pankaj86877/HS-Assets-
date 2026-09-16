@@ -29,9 +29,11 @@ const employeesDataPath = path.join(process.cwd(), 'src/data/employees.json');
 // --- GOOGLE DRIVE FOLDERS ---
 export async function fetchResources(): Promise<SearchResource[]> {
   try {
-    const kvData = await kv.get<SearchResource[]>('resources:data');
-    if (kvData) {
-      return kvData.map(r => ({ ...r, type: r.type || "google-drive" }));
+    if (process.env.KV_REST_API_URL) {
+      const kvData = await kv.get<SearchResource[]>('resources:data');
+      if (kvData) {
+        return kvData.map(r => ({ ...r, type: r.type || "google-drive" }));
+      }
     }
     const data = await fs.readFile(dataPath, 'utf-8');
     const parsed = JSON.parse(data) as SearchResource[];
@@ -44,7 +46,11 @@ export async function fetchResources(): Promise<SearchResource[]> {
 
 async function saveResources(resources: SearchResource[]) {
   try {
-    await kv.set('resources:data', resources);
+    if (process.env.KV_REST_API_URL) {
+      await kv.set('resources:data', resources);
+    } else {
+      await fs.writeFile(dataPath, JSON.stringify(resources, null, 2), 'utf-8');
+    }
   } catch (e) {
     // If kv fails, attempt fs (for local dev without KV)
     await fs.writeFile(dataPath, JSON.stringify(resources, null, 2), 'utf-8');

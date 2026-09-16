@@ -6,6 +6,9 @@ import { kv } from '@vercel/kv';
 
 export async function fetchRequests(): Promise<CreativeRequest[]> {
   try {
+    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+      return [];
+    }
     const ids = await kv.smembers('requests:index');
     if (ids && ids.length > 0) {
       const requests = await Promise.all(ids.map(id => kv.get<CreativeRequest>(`request:${id}`)));
@@ -14,7 +17,7 @@ export async function fetchRequests(): Promise<CreativeRequest[]> {
     
     return [];
   } catch (error) {
-    console.error("Failed to fetch requests:", error);
+    console.warn("Failed to fetch requests (KV missing locally)");
     return [];
   }
 }
@@ -57,6 +60,9 @@ export async function createRequest(data: Omit<CreativeRequest, "id" | "status" 
       history: [historyEntry]
     };
 
+    if (!process.env.KV_REST_API_URL) {
+      return { success: false, error: "Local dev fallback: KV missing" };
+    }
     await kv.set(`request:${newRequest.id}`, newRequest);
     await kv.sadd('requests:index', newRequest.id);
     
@@ -88,7 +94,9 @@ export async function updateRequestStatus(id: string, newStatus: RequestStatus) 
   req.status = newStatus;
   req.updatedAt = now;
 
-  await kv.set(`request:${req.id}`, req);
+  if (process.env.KV_REST_API_URL) {
+    await kv.set(`request:${req.id}`, req);
+  }
   return req;
 }
 
@@ -99,8 +107,10 @@ export async function deleteRequest(id: string) {
   }
 
   const requests = await fetchRequests();
-  await kv.del(`request:${id}`);
-  await kv.srem('requests:index', id);
+  if (process.env.KV_REST_API_URL) {
+    await kv.del(`request:${id}`);
+    await kv.srem('requests:index', id);
+  }
 }
 
 export async function editRequest(id: string, updates: Partial<CreativeRequest>) {
@@ -133,6 +143,8 @@ export async function editRequest(id: string, updates: Partial<CreativeRequest>)
   
   req.updatedAt = now;
 
-  await kv.set(`request:${req.id}`, req);
+  if (process.env.KV_REST_API_URL) {
+    await kv.set(`request:${req.id}`, req);
+  }
   return req;
 }

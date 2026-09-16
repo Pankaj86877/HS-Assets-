@@ -19,10 +19,12 @@ export async function getUsers(): Promise<User[]> {
     let loadedUsers: User[] = [];
     
     try {
-      const ids = await kv.smembers('users:index');
-      if (ids && ids.length > 0) {
-        const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
-        loadedUsers = users.filter(Boolean) as User[];
+      if (process.env.KV_REST_API_URL) {
+        const ids = await kv.smembers('users:index');
+        if (ids && ids.length > 0) {
+          const users = await Promise.all(ids.map(id => kv.get<User>(`user:${id}`)));
+          loadedUsers = users.filter(Boolean) as User[];
+        }
       }
     } catch (e) {
       console.warn("KV fetch failed, continuing to fallback", e);
@@ -36,8 +38,10 @@ export async function getUsers(): Promise<User[]> {
       if (!loadedUsers.find(u => u.username.toLowerCase() === defaultUser.username.toLowerCase())) {
         loadedUsers.push(defaultUser);
         try {
-          await kv.set(`user:${defaultUser.id}`, defaultUser);
-          await kv.sadd('users:index', defaultUser.id);
+          if (process.env.KV_REST_API_URL) {
+            await kv.set(`user:${defaultUser.id}`, defaultUser);
+            await kv.sadd('users:index', defaultUser.id);
+          }
         } catch (e) {
           console.warn("Failed to seed user to KV", e);
         }
