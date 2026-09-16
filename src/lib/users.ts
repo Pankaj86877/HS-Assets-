@@ -37,7 +37,7 @@ export async function createUser(data: Partial<User> & { password?: string }) {
     throw new Error("Username already exists");
   }
 
-  const newId = `user-${String(users.length + 1).padStart(3, '0')}`;
+  const newId = `user-${String(allUsers.length + 1).padStart(3, '0')}`;
   
   let hashed = "";
   if (data.password) {
